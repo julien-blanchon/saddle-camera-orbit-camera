@@ -1,0 +1,18 @@
+[package]
+name = "saddle-camera-orbit-camera"
+version = "0.1.0"
+edition = "2024"
+publish = false
+repository = "https://github.com/julien-blanchon/saddle-camera-orbit-camera"
+license = "MIT-0"
+description = "Reusable orbit, pan, and zoom camera for 3D Bevy scenes"
+
+[dependencies]
+bevy = "0.18"
+
+[workspace]
+
+[lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"
+nonstandard_macro_braces = "warn"
