@@ -80,6 +80,7 @@ pub struct OrbitCameraMouseControls {
     pub orbit_sensitivity: Vec2,
     pub pan_sensitivity: f32,
     pub wheel_zoom_sensitivity: f32,
+    pub zoom_to_cursor: bool,
 }
 
 impl Default for OrbitCameraMouseControls {
@@ -90,6 +91,30 @@ impl Default for OrbitCameraMouseControls {
             orbit_sensitivity: Vec2::splat(0.008),
             pan_sensitivity: 1.0,
             wheel_zoom_sensitivity: 0.14,
+            zoom_to_cursor: false,
+        }
+    }
+}
+
+#[derive(Reflect, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrbitCameraPresetView {
+    Front,
+    Back,
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+impl OrbitCameraPresetView {
+    pub fn angles(self) -> (f32, f32) {
+        match self {
+            Self::Front => (0.0, 0.0),
+            Self::Back => (std::f32::consts::PI, 0.0),
+            Self::Left => (-std::f32::consts::FRAC_PI_2, 0.0),
+            Self::Right => (std::f32::consts::FRAC_PI_2, 0.0),
+            Self::Top => (0.0, std::f32::consts::FRAC_PI_2),
+            Self::Bottom => (0.0, -std::f32::consts::FRAC_PI_2),
         }
     }
 }
@@ -325,6 +350,12 @@ impl OrbitCamera {
 
     pub fn set_target_orthographic_scale(&mut self, scale: f32) {
         self.target_orthographic_scale = scale;
+    }
+
+    pub fn set_preset_view(&mut self, preset: OrbitCameraPresetView) {
+        let (yaw, pitch) = preset.angles();
+        self.target_yaw = yaw;
+        self.target_pitch = pitch;
     }
 
     pub fn frame_sphere(

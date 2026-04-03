@@ -20,6 +20,7 @@ fn main() {
         }),
         OrbitCameraPlugin::default(),
     ));
+    common::install_pane(&mut app);
     app.add_systems(Startup, setup);
     app.run();
 }
@@ -46,13 +47,18 @@ fn setup(
         },
         ..OrbitCameraSettings::default()
     };
+    let orbit = OrbitCamera::looking_at(common::DEFAULT_FOCUS, Vec3::new(-7.5, 5.2, 10.0));
 
     common::spawn_orbit_camera(
         &mut commands,
         "Basic Orbit Camera",
-        OrbitCamera::looking_at(common::DEFAULT_FOCUS, Vec3::new(-7.5, 5.2, 10.0)),
-        settings,
+        orbit.clone(),
+        settings.clone(),
         Projection::Perspective(PerspectiveProjection::default()),
         true,
+    );
+    common::queue_example_pane(
+        &mut commands,
+        common::ExampleOrbitPane::from_setup(&orbit, &settings),
     );
 }

@@ -5,8 +5,8 @@ mod systems;
 
 pub use components::{
     OrbitAngleLimit, OrbitAxisInversion, OrbitCamera, OrbitCameraAutoRotate, OrbitCameraFollow,
-    OrbitCameraHome, OrbitCameraInputTarget, OrbitCameraMouseControls, OrbitCameraSettings,
-    OrbitCameraSmoothing, OrbitCameraTouchControls, OrbitZoomLimits,
+    OrbitCameraHome, OrbitCameraInputTarget, OrbitCameraMouseControls, OrbitCameraPresetView,
+    OrbitCameraSettings, OrbitCameraSmoothing, OrbitCameraTouchControls, OrbitZoomLimits,
 };
 pub use math::{
     apply_exponential_zoom, fit_orthographic_scale_for_sphere, fit_perspective_distance_for_sphere,
@@ -92,6 +92,7 @@ impl Plugin for OrbitCameraPlugin {
             .register_type::<OrbitCameraHome>()
             .register_type::<OrbitCameraInputTarget>()
             .register_type::<OrbitCameraMouseControls>()
+            .register_type::<OrbitCameraPresetView>()
             .register_type::<OrbitCameraSettings>()
             .register_type::<OrbitCameraSmoothing>()
             .register_type::<OrbitCameraTouchControls>()

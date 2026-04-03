@@ -47,6 +47,8 @@ Only cameras marked with `OrbitCameraInputTarget` consume this shared pointer in
 
 `apply_pointer_input` writes only to the selected camera's target state. Mouse orbit modifies `target_yaw` and `target_pitch`. Panning adjusts `target_focus`, or `OrbitCameraFollow.offset` when a follow component is active. Perspective zoom updates `target_distance`; orthographic zoom updates `target_orthographic_scale`.
 
+When `OrbitCameraMouseControls::zoom_to_cursor` is enabled, perspective zoom first solves the point under the cursor on the current focus plane, applies the new target distance, then offsets the focus so that point remains visually stable. This keeps model-viewer zooms feeling closer to Blender-style “zoom toward the cursor” behavior without introducing scene-picking dependencies.
+
 ### `ApplyIntent`
 
 - `tick_idle_timers`

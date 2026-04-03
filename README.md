@@ -9,6 +9,7 @@ The crate is built for generic inspection and gameplay-adjacent navigation: mode
 - perspective and orthographic orbit cameras
 - focus-point inspection and tracked-entity follow
 - mouse orbit, pan, and wheel zoom
+- preset front/back/left/right/top/bottom views for model-viewer workflows
 - touch orbit, two-finger pan, and pinch zoom
 - smoothing, pitch and yaw limits, zoom limits, and idle auto-rotate
 - multiple cameras in one world with explicit input opt-in
@@ -78,6 +79,7 @@ For examples and always-on tools, `OrbitCameraPlugin::always_on(Update)` is the 
 | `OrbitCameraSystems` | Public ordering hooks: `ReadInput`, `ApplyIntent`, `SyncTransform` |
 | `OrbitCamera` | Main controller component containing current state, target state, and home view |
 | `OrbitCameraSettings` | Input, limits, smoothing, and auto-rotate tuning surface |
+| `OrbitCameraPresetView` | Named front/back/left/right/top/bottom view targets for editor and model-viewer UX |
 | `OrbitCameraInputTarget` | Opt-in marker for which camera should consume shared pointer input |
 | `OrbitCameraFollow` | Optional follow-target component that keeps focus attached to an entity |
 | `OrbitAngleLimit`, `OrbitZoomLimits` | Reusable limit types for pitch, yaw, distance, and orthographic scale |
@@ -100,6 +102,7 @@ The runtime is intentionally easy to drive from gameplay or tooling code:
 
 - mutate `target_focus`, `target_yaw`, `target_pitch`, `target_distance`, or `target_orthographic_scale`
 - call `focus_on`, `reset_to_home`, `capture_home_from_current`, `frame_sphere`, or `frame_aabb`
+- call `set_preset_view` to jump or blend toward a named orthographic-style view
 - add `OrbitCameraFollow` to preserve orbit angles while tracking an entity
 
 If your app uses `bevy_enhanced_input`, keep that layer in consumer code and write its actions into the public `OrbitCamera` component instead of coupling the shared crate to BEI directly.
@@ -116,11 +119,12 @@ If your app uses `bevy_enhanced_input`, keep that layer in consumer code and wri
 
 | Example | Purpose | Run |
 | --- | --- | --- |
-| `basic` | Baseline model-viewer style orbit camera with idle auto-rotate | `cargo run -p saddle-camera-orbit-camera-example-basic` |
+| `basic` | Baseline model-viewer orbit camera with idle auto-rotate and live `saddle-pane` tuning | `cargo run -p saddle-camera-orbit-camera-example-basic` |
+| `preset_views` | CAD-style preset view snapping over an art-directed showcase prop | `cargo run -p saddle-camera-orbit-camera-example-preset-views` |
 | `orthographic` | Orthographic tactics-style board overview with bounded pitch | `cargo run -p saddle-camera-orbit-camera-example-orthographic` |
 | `follow_target` | Moving tracked target while orbit and zoom stay interactive | `cargo run -p saddle-camera-orbit-camera-example-follow-target` |
 | `fit_bounds` | Public framing helpers cycling between several authored bounds | `cargo run -p saddle-camera-orbit-camera-example-fit-bounds` |
-| `touch_viewer` | Touch-first product-viewer layout using the same runtime | `cargo run -p saddle-camera-orbit-camera-example-touch-viewer` |
+| `touch_viewer` | Touch-first product-viewer layout using the same runtime, including cursor-aware mouse zoom | `cargo run -p saddle-camera-orbit-camera-example-touch-viewer` |
 
 ## Workspace Lab
 

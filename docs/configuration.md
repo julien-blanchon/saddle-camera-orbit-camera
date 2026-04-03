@@ -25,6 +25,7 @@
 | `orbit_sensitivity` | `Vec2` | `(0.008, 0.008)` | non-negative finite values | Orbit radians per mouse pixel on X and Y | Larger values feel faster |
 | `pan_sensitivity` | `f32` | `1.0` | non-negative finite values | Multiplier for screen-space pan drag | World-space pan also scales with distance or orthographic area |
 | `wheel_zoom_sensitivity` | `f32` | `0.14` | non-negative finite values | Multiplier for exponential wheel zoom | Perspective and orthographic both use multiplicative zoom feel |
+| `zoom_to_cursor` | `bool` | `false` | `true` or `false` | Keeps the point under the cursor stable while perspective zoom changes distance | Uses a focus-plane solve, not scene picking |
 
 ## `OrbitCameraTouchControls`
 
@@ -90,6 +91,18 @@ Useful helpers:
 - `snap_to_target()`
 - `frame_sphere(projection, center, radius, padding)`
 - `frame_aabb(projection, center, half_extents, padding)`
+- `set_preset_view(OrbitCameraPresetView)`
+
+## `OrbitCameraPresetView`
+
+Available presets:
+
+- `Front`
+- `Back`
+- `Left`
+- `Right`
+- `Top`
+- `Bottom`
 
 ## Perspective vs Orthographic Notes
 

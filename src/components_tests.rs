@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::OrbitCamera;
+use crate::{OrbitCamera, OrbitCameraPresetView};
 
 #[test]
 fn looking_at_round_trips_focus_and_distance() {
@@ -50,4 +50,16 @@ fn frame_aabb_uses_half_extents_length_as_bounds_radius() {
 
     assert_eq!(camera.target_focus, Vec3::new(1.0, 2.0, 3.0));
     assert!(camera.target_distance > camera.distance);
+}
+
+#[test]
+fn preset_views_update_target_angles() {
+    let mut camera = OrbitCamera::default();
+
+    camera.set_preset_view(OrbitCameraPresetView::Right);
+    assert!((camera.target_yaw - std::f32::consts::FRAC_PI_2).abs() < 0.000_1);
+    assert!(camera.target_pitch.abs() < 0.000_1);
+
+    camera.set_preset_view(OrbitCameraPresetView::Top);
+    assert!((camera.target_pitch - std::f32::consts::FRAC_PI_2).abs() < 0.000_1);
 }

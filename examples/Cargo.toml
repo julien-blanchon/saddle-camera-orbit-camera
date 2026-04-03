@@ -2,6 +2,7 @@
 members = [
     "common",
     "basic",
+    "preset_views",
     "orthographic",
     "follow_target",
     "fit_bounds",

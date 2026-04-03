@@ -1,5 +1,5 @@
 [package]
-name = "saddle-camera-orbit-camera-example-basic"
+name = "saddle-camera-orbit-camera-example-preset-views"
 version = "0.1.0"
 edition = "2024"
 publish = false

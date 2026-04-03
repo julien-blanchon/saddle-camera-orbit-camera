@@ -40,6 +40,7 @@ fn main() {
         OrbitCameraPlugin::default(),
         RemotePlugin::default(),
     ));
+    common::install_pane(&mut app);
     #[cfg(feature = "brp")]
     app.add_plugins(BrpExtrasPlugin::with_http_plugin(
         RemoteHttpPlugin::default(),
@@ -86,14 +87,21 @@ fn setup(
         ))
         .id();
 
+    let settings = OrbitCameraSettings::default();
+    let orbit = OrbitCamera::looking_at(common::DEFAULT_FOCUS, Vec3::new(-8.0, 5.5, 12.0))
+        .with_orthographic_scale(1.25);
+
     let camera = common::spawn_orbit_camera(
         &mut commands,
         "Lab Orbit Camera",
-        OrbitCamera::looking_at(common::DEFAULT_FOCUS, Vec3::new(-8.0, 5.5, 12.0))
-            .with_orthographic_scale(1.25),
-        OrbitCameraSettings::default(),
+        orbit.clone(),
+        settings.clone(),
         Projection::Perspective(PerspectiveProjection::default()),
         true,
+    );
+    common::queue_example_pane(
+        &mut commands,
+        common::ExampleOrbitPane::from_setup(&orbit, &settings),
     );
     commands.insert_resource(LabCameraEntity(camera));
     commands.insert_resource(LabTargetEntity(target));

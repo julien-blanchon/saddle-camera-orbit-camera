@@ -20,6 +20,7 @@ fn main() {
         }),
         OrbitCameraPlugin::default(),
     ));
+    common::install_pane(&mut app);
     app.add_systems(Startup, setup);
     app.run();
 }
@@ -41,13 +42,19 @@ fn setup(
     let mut settings = OrbitCameraSettings::default();
     settings.touch.enabled = true;
     settings.touch.pinch_zoom_sensitivity = 0.012;
+    settings.mouse.zoom_to_cursor = true;
+    let orbit = OrbitCamera::looking_at(common::DEFAULT_FOCUS, Vec3::new(0.0, 4.5, 9.0));
 
     common::spawn_orbit_camera(
         &mut commands,
         "Touch Orbit Camera",
-        OrbitCamera::looking_at(common::DEFAULT_FOCUS, Vec3::new(0.0, 4.5, 9.0)),
-        settings,
+        orbit.clone(),
+        settings.clone(),
         Projection::Perspective(PerspectiveProjection::default()),
         true,
+    );
+    common::queue_example_pane(
+        &mut commands,
+        common::ExampleOrbitPane::from_setup(&orbit, &settings),
     );
 }

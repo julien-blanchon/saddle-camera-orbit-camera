@@ -1,6 +1,7 @@
 use bevy::{
     camera::{OrthographicProjection, ScalingMode},
     prelude::*,
+    window::PrimaryWindow,
 };
 use saddle_bevy_e2e::{
     E2EPlugin, E2ESet,
@@ -9,7 +10,10 @@ use saddle_bevy_e2e::{
     init_scenario,
     scenario::Scenario,
 };
-use saddle_camera_orbit_camera::{OrbitCamera, OrbitCameraFollow, OrbitCameraInputTarget, OrbitCameraSystems};
+use saddle_camera_orbit_camera::{
+    OrbitCamera, OrbitCameraFollow, OrbitCameraInputTarget, OrbitCameraPresetView,
+    OrbitCameraSettings, OrbitCameraSystems,
+};
 
 use crate::{LabCameraEntity, LabTargetEntity};
 
@@ -63,6 +67,8 @@ fn scenario_by_name(name: &str) -> Option<Scenario> {
         "orbit_camera_smoke" => Some(build_smoke()),
         "orbit_camera_input" => Some(build_input()),
         "orbit_camera_follow_target" => Some(build_follow_target()),
+        "orbit_camera_preset_views" => Some(build_preset_views()),
+        "orbit_camera_zoom_to_cursor" => Some(build_zoom_to_cursor()),
         "snap_orbit_camera_ortho" => Some(build_orthographic_snapshot()),
         _ => None,
     }
@@ -73,6 +79,8 @@ fn list_scenarios() -> Vec<&'static str> {
         "orbit_camera_smoke",
         "orbit_camera_input",
         "orbit_camera_follow_target",
+        "orbit_camera_preset_views",
+        "orbit_camera_zoom_to_cursor",
         "snap_orbit_camera_ortho",
     ]
 }
@@ -90,6 +98,14 @@ fn camera_state(world: &World) -> OrbitCamera {
         .get::<OrbitCamera>(camera_entity(world))
         .expect("orbit camera should exist")
         .clone()
+}
+
+fn set_cursor_position(world: &mut World, logical_position: Vec2) {
+    let mut windows = world.query_filtered::<&mut Window, With<PrimaryWindow>>();
+    let Ok(mut window) = windows.single_mut(world) else {
+        return;
+    };
+    window.set_cursor_position(Some(logical_position));
 }
 
 fn build_smoke() -> Scenario {
@@ -185,6 +201,77 @@ fn build_follow_target() -> Scenario {
         }))
         .then(assertions::log_summary("orbit_camera_follow_target summary"))
         .then(Action::Screenshot("orbit_camera_follow_after".into()))
+        .then(Action::WaitFrames(1))
+        .build()
+}
+
+fn build_preset_views() -> Scenario {
+    Scenario::builder("orbit_camera_preset_views")
+        .description(
+            "Jump the shared orbit camera through the new preset-view helpers and verify the authored target angles land on the expected axes.",
+        )
+        .then(Action::WaitFrames(30))
+        .then(Action::Screenshot("orbit_camera_preset_views_before".into()))
+        .then(Action::Custom(Box::new(|world| {
+            let entity = camera_entity(world);
+            let mut camera = world
+                .get_mut::<OrbitCamera>(entity)
+                .expect("orbit camera should exist");
+            camera.set_preset_view(OrbitCameraPresetView::Top);
+        })))
+        .then(Action::WaitFrames(10))
+        .then(assertions::custom("top preset drives pitch toward overhead", |world| {
+            let orbit = camera_state(world);
+            orbit.target_pitch > 1.4 && orbit.pitch > 0.8
+        }))
+        .then(Action::Custom(Box::new(|world| {
+            let entity = camera_entity(world);
+            let mut camera = world
+                .get_mut::<OrbitCamera>(entity)
+                .expect("orbit camera should exist");
+            camera.set_preset_view(OrbitCameraPresetView::Right);
+        })))
+        .then(Action::WaitFrames(12))
+        .then(assertions::custom("right preset drives yaw onto the side view", |world| {
+            let orbit = camera_state(world);
+            (orbit.target_yaw - std::f32::consts::FRAC_PI_2).abs() < 0.01
+                && orbit.target_pitch.abs() < 0.05
+        }))
+        .then(assertions::log_summary("orbit_camera_preset_views summary"))
+        .then(Action::Screenshot("orbit_camera_preset_views_after".into()))
+        .then(Action::WaitFrames(1))
+        .build()
+}
+
+fn build_zoom_to_cursor() -> Scenario {
+    Scenario::builder("orbit_camera_zoom_to_cursor")
+        .description(
+            "Enable cursor-aware zoom, place the cursor away from center, and assert a wheel zoom changes both distance and focus instead of only dollying straight in.",
+        )
+        .then(Action::WaitFrames(30))
+        .then(Action::Custom(Box::new(|world| {
+            let entity = camera_entity(world);
+            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
+                settings.mouse.zoom_to_cursor = true;
+            }
+            set_cursor_position(world, Vec2::new(1120.0, 260.0));
+        })))
+        .then(Action::Screenshot("orbit_camera_zoom_to_cursor_before".into()))
+        .then(Action::WaitFrames(4))
+        .then(Action::MouseScroll {
+            delta: Vec2::new(0.0, 4.0),
+        })
+        .then(Action::WaitFrames(8))
+        .then(assertions::custom(
+            "zoom-to-cursor moves focus as well as distance",
+            |world| {
+                let orbit = camera_state(world);
+                orbit.target_distance < orbit.home.distance
+                    && orbit.target_focus.distance(orbit.home.focus) > 0.25
+            },
+        ))
+        .then(assertions::log_summary("orbit_camera_zoom_to_cursor summary"))
+        .then(Action::Screenshot("orbit_camera_zoom_to_cursor_after".into()))
         .then(Action::WaitFrames(1))
         .build()
 }

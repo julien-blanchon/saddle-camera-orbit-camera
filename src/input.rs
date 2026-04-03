@@ -122,7 +122,7 @@ pub(crate) fn apply_pointer_input(
         Query<
             (
                 &Camera,
-                &Transform,
+                &GlobalTransform,
                 &Projection,
                 &mut OrbitCamera,
                 &OrbitCameraSettings,
@@ -141,7 +141,7 @@ pub(crate) fn apply_pointer_input(
     };
 
     let mut controlled = cameras.p1();
-    let Ok((camera, transform, projection, mut orbit, settings, follow, mut internal)) =
+    let Ok((camera, camera_transform, projection, mut orbit, settings, follow, mut internal)) =
         controlled.get_mut(entity)
     else {
         return;
@@ -150,6 +150,8 @@ pub(crate) fn apply_pointer_input(
     if !settings.enabled {
         return;
     }
+
+    let mut follow = follow;
 
     let motion = mouse_motion.map_or(Vec2::ZERO, |delta| delta.delta);
     let scroll = mouse_scroll.map_or(Vec2::ZERO, |delta| delta.delta);
@@ -221,20 +223,20 @@ pub(crate) fn apply_pointer_input(
             Projection::Perspective(perspective) => perspective_pan_translation(
                 viewport_size,
                 perspective,
-                transform.rotation,
+                camera_transform.compute_transform().rotation,
                 orbit.distance,
                 pan_pixels,
             ),
             Projection::Orthographic(orthographic) => orthographic_pan_translation(
                 viewport_size,
                 orthographic,
-                transform.rotation,
+                camera_transform.compute_transform().rotation,
                 pan_pixels,
             ),
             _ => Vec3::ZERO,
         };
 
-        if let Some(mut follow) = follow {
+        if let Some(follow) = follow.as_deref_mut() {
             if follow.enabled {
                 follow.offset += translation;
             } else {
@@ -246,6 +248,13 @@ pub(crate) fn apply_pointer_input(
     }
 
     if zoom_delta.abs() > f32::EPSILON {
+        let cursor_anchor_before = (settings.mouse.zoom_to_cursor
+            && matches!(projection, Projection::Perspective(_)))
+        .then(|| current_cursor_position(&primary_window))
+        .flatten()
+        .and_then(|cursor| {
+            cursor_focus_anchor(camera, camera_transform, cursor, orbit.target_focus)
+        });
         match projection {
             Projection::Perspective(_) => {
                 orbit.target_distance =
@@ -256,6 +265,14 @@ pub(crate) fn apply_pointer_input(
                     apply_exponential_zoom(orbit.target_orthographic_scale, zoom_delta, 1.0);
             }
             _ => {}
+        }
+
+        if let (Some(cursor), Some(anchor_before)) =
+            (current_cursor_position(&primary_window), cursor_anchor_before)
+            && let Some(anchor_after) =
+                predicted_cursor_focus_anchor(camera, &orbit, cursor)
+        {
+            apply_focus_translation(&mut orbit, follow.as_deref_mut(), anchor_before - anchor_after);
         }
     }
 
@@ -282,4 +299,64 @@ fn select_input_target(
 
 fn apply_inversion(value: f32, inverted: bool) -> f32 {
     if inverted { -value } else { value }
+}
+
+fn current_cursor_position(windows: &Query<&Window, With<PrimaryWindow>>) -> Option<Vec2> {
+    windows.single().ok()?.cursor_position()
+}
+
+fn cursor_focus_anchor(
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    cursor_position: Vec2,
+    focus: Vec3,
+) -> Option<Vec3> {
+    let ray = camera
+        .viewport_to_world(camera_transform, cursor_position)
+        .ok()?;
+    let normal = camera_transform.forward().as_vec3();
+    ray.plane_intersection_point(focus, InfinitePlane3d::new(normal))
+}
+
+fn predicted_cursor_focus_anchor(
+    camera: &Camera,
+    orbit: &OrbitCamera,
+    cursor_position: Vec2,
+) -> Option<Vec3> {
+    let predicted_transform = Transform {
+        rotation: crate::orbit_rotation(orbit.target_yaw, orbit.target_pitch),
+        translation: crate::orbit_translation(
+            orbit.target_focus,
+            orbit.target_yaw,
+            orbit.target_pitch,
+            orbit.target_distance,
+        ),
+        ..default()
+    };
+
+    cursor_focus_anchor(
+        camera,
+        &GlobalTransform::from(predicted_transform),
+        cursor_position,
+        orbit.target_focus,
+    )
+}
+
+fn apply_focus_translation(
+    orbit: &mut OrbitCamera,
+    follow: Option<&mut OrbitCameraFollow>,
+    translation: Vec3,
+) {
+    if translation.length_squared() <= f32::EPSILON {
+        return;
+    }
+
+    if let Some(follow) = follow {
+        if follow.enabled {
+            follow.offset += translation;
+            return;
+        }
+    }
+
+    orbit.target_focus += translation;
 }

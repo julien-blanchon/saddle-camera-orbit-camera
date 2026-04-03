@@ -1,10 +1,121 @@
 use bevy::{app::AppExit, camera::Projection, light::GlobalAmbientLight, prelude::*};
-use saddle_camera_orbit_camera::{OrbitCamera, OrbitCameraInputTarget, OrbitCameraSettings};
+use bevy_flair::prelude::InlineStyle;
+use saddle_camera_orbit_camera::{
+    OrbitCamera, OrbitCameraInputTarget, OrbitCameraSettings, OrbitCameraSystems,
+};
+use saddle_pane::prelude::*;
+
+const PANE_DARK_THEME_VARS: &[(&str, &str)] = &[
+    ("--pane-elevation-1", "#28292e"),
+    ("--pane-elevation-2", "#222327"),
+    ("--pane-elevation-3", "rgba(187, 188, 196, 0.10)"),
+    ("--pane-border", "#3c3d44"),
+    ("--pane-border-focus", "#7090b0"),
+    ("--pane-border-subtle", "#333438"),
+    ("--pane-text-primary", "#bbbcc4"),
+    ("--pane-text-secondary", "#78797f"),
+    ("--pane-text-muted", "#5c5d64"),
+    ("--pane-text-on-accent", "#ffffff"),
+    ("--pane-text-brighter", "#d0d1d8"),
+    ("--pane-text-monitor", "#9a9ba2"),
+    ("--pane-text-log", "#8a8b92"),
+    ("--pane-accent", "#4a6fa5"),
+    ("--pane-accent-hover", "#5a8fd5"),
+    ("--pane-accent-active", "#3a5f95"),
+    ("--pane-accent-subtle", "rgba(74, 111, 165, 0.15)"),
+    ("--pane-accent-fill", "rgba(74, 111, 165, 0.60)"),
+    ("--pane-accent-fill-hover", "rgba(90, 143, 213, 0.70)"),
+    ("--pane-accent-fill-active", "rgba(90, 143, 213, 0.80)"),
+    ("--pane-accent-checked", "rgba(74, 111, 165, 0.25)"),
+    ("--pane-accent-checked-hover", "rgba(74, 111, 165, 0.35)"),
+    ("--pane-accent-indicator", "rgba(74, 111, 165, 0.80)"),
+    ("--pane-accent-knob", "#7aacdf"),
+    ("--pane-widget-bg", "rgba(187, 188, 196, 0.10)"),
+    ("--pane-widget-hover", "rgba(187, 188, 196, 0.15)"),
+    ("--pane-widget-focus", "rgba(187, 188, 196, 0.20)"),
+    ("--pane-widget-active", "rgba(187, 188, 196, 0.25)"),
+    ("--pane-widget-bg-muted", "rgba(187, 188, 196, 0.06)"),
+    ("--pane-tab-hover-bg", "rgba(187, 188, 196, 0.06)"),
+    ("--pane-hover-bg", "rgba(255, 255, 255, 0.03)"),
+    ("--pane-active-bg", "rgba(255, 255, 255, 0.05)"),
+    ("--pane-popup-bg", "#1e1f24"),
+    ("--pane-bg-dark", "rgba(0, 0, 0, 0.25)"),
+];
 
 pub const DEFAULT_FOCUS: Vec3 = Vec3::new(0.0, 1.2, 0.0);
 
 #[derive(Resource)]
 struct AutoExitAfter(Timer);
+
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Pane)]
+#[pane(title = "Orbit Camera", position = "top-right")]
+pub struct ExampleOrbitPane {
+    #[pane(slider, min = 0.001, max = 0.03, step = 0.001)]
+    pub orbit_sensitivity: f32,
+    #[pane(slider, min = 0.2, max = 3.0, step = 0.05)]
+    pub pan_sensitivity: f32,
+    #[pane(slider, min = 0.02, max = 0.4, step = 0.01)]
+    pub wheel_zoom_sensitivity: f32,
+    #[pane(toggle)]
+    pub zoom_to_cursor: bool,
+    #[pane(toggle)]
+    pub auto_rotate_enabled: bool,
+    #[pane(slider, min = 0.0, max = 6.0, step = 0.1)]
+    pub auto_rotate_wait_seconds: f32,
+    #[pane(slider, min = 0.0, max = 1.5, step = 0.01)]
+    pub auto_rotate_speed: f32,
+    #[pane(slider, min = 0.5, max = 80.0, step = 0.1)]
+    pub distance: f32,
+    #[pane(slider, min = 0.1, max = 12.0, step = 0.05)]
+    pub orthographic_scale: f32,
+    #[pane(slider, min = 0.1, max = 80.0, step = 0.1)]
+    pub min_distance: f32,
+    #[pane(slider, min = 1.0, max = 250.0, step = 0.5)]
+    pub max_distance: f32,
+}
+
+impl Default for ExampleOrbitPane {
+    fn default() -> Self {
+        Self {
+            orbit_sensitivity: 0.008,
+            pan_sensitivity: 1.0,
+            wheel_zoom_sensitivity: 0.14,
+            zoom_to_cursor: false,
+            auto_rotate_enabled: false,
+            auto_rotate_wait_seconds: 2.0,
+            auto_rotate_speed: 0.45,
+            distance: 12.0,
+            orthographic_scale: 1.0,
+            min_distance: 0.5,
+            max_distance: 250.0,
+        }
+    }
+}
+
+impl ExampleOrbitPane {
+    pub fn from_setup(orbit: &OrbitCamera, settings: &OrbitCameraSettings) -> Self {
+        Self {
+            orbit_sensitivity: settings.mouse.orbit_sensitivity.x,
+            pan_sensitivity: settings.mouse.pan_sensitivity,
+            wheel_zoom_sensitivity: settings.mouse.wheel_zoom_sensitivity,
+            zoom_to_cursor: settings.mouse.zoom_to_cursor,
+            auto_rotate_enabled: settings.auto_rotate.enabled,
+            auto_rotate_wait_seconds: settings.auto_rotate.wait_seconds,
+            auto_rotate_speed: settings.auto_rotate.speed,
+            distance: orbit.target_distance,
+            orthographic_scale: orbit.target_orthographic_scale,
+            min_distance: settings.zoom_limits.min_distance,
+            max_distance: settings.zoom_limits.max_distance,
+        }
+    }
+}
+
+#[derive(Resource, Clone, Copy)]
+struct ExampleOrbitPaneBootstrap(ExampleOrbitPane);
+
+pub fn queue_example_pane(commands: &mut Commands, pane: ExampleOrbitPane) {
+    commands.insert_resource(ExampleOrbitPaneBootstrap(pane));
+}
 
 pub fn apply_example_defaults(app: &mut App) {
     app.insert_resource(ClearColor(Color::srgb(0.04, 0.05, 0.07)));
@@ -12,6 +123,51 @@ pub fn apply_example_defaults(app: &mut App) {
     if let Some(timer) = auto_exit_from_env() {
         app.insert_resource(timer);
         app.add_systems(Update, auto_exit_after);
+    }
+}
+
+pub fn install_pane(app: &mut App) {
+    app.add_plugins((
+        bevy_flair::FlairPlugin,
+        bevy_input_focus::InputDispatchPlugin,
+        bevy_ui_widgets::UiWidgetsPlugins,
+        bevy_input_focus::tab_navigation::TabNavigationPlugin,
+        PanePlugin,
+    ))
+    .register_pane::<ExampleOrbitPane>()
+    .add_systems(
+        PreUpdate,
+        (
+            prime_pane_theme_vars,
+            apply_bootstrapped_pane,
+            sync_example_pane,
+        )
+            .chain(),
+    )
+    .add_systems(
+        Update,
+        reflect_example_pane.after(OrbitCameraSystems::ApplyIntent),
+    );
+}
+
+fn prime_pane_theme_vars(mut panes: Query<&mut InlineStyle, Added<PaneRoot>>) {
+    for mut style in &mut panes {
+        for &(key, value) in PANE_DARK_THEME_VARS {
+            style.set(key, value.to_owned());
+        }
+    }
+}
+
+fn apply_bootstrapped_pane(
+    bootstrap: Option<Res<ExampleOrbitPaneBootstrap>>,
+    mut pane: ResMut<ExampleOrbitPane>,
+) {
+    let Some(bootstrap) = bootstrap else {
+        return;
+    };
+
+    if *pane == ExampleOrbitPane::default() {
+        *pane = bootstrap.0;
     }
 }
 
@@ -144,4 +300,57 @@ fn auto_exit_after(
     if timer.0.tick(time.delta()).just_finished() {
         exit.write(AppExit::Success);
     }
+}
+
+fn sync_example_pane(
+    mut pane: ResMut<ExampleOrbitPane>,
+    bootstrap: Option<Res<ExampleOrbitPaneBootstrap>>,
+    mut cameras: Query<(&mut OrbitCamera, &mut OrbitCameraSettings)>,
+) {
+    let has_bootstrap = bootstrap.is_some();
+    if let Some(bootstrap) = bootstrap {
+        if *pane == ExampleOrbitPane::default() && bootstrap.0 != *pane {
+            *pane = bootstrap.0;
+        }
+    }
+
+    for (mut orbit, mut settings) in &mut cameras {
+        let scene_pane = ExampleOrbitPane::from_setup(&orbit, &settings);
+        if !has_bootstrap && *pane == ExampleOrbitPane::default() && scene_pane != *pane {
+            *pane = scene_pane;
+            return;
+        }
+
+        let min_distance = pane.min_distance.max(0.1);
+        let max_distance = pane.max_distance.max(min_distance + 0.1);
+
+        settings.mouse.orbit_sensitivity = Vec2::splat(pane.orbit_sensitivity);
+        settings.mouse.pan_sensitivity = pane.pan_sensitivity;
+        settings.mouse.wheel_zoom_sensitivity = pane.wheel_zoom_sensitivity;
+        settings.mouse.zoom_to_cursor = pane.zoom_to_cursor;
+        settings.auto_rotate.enabled = pane.auto_rotate_enabled;
+        settings.auto_rotate.wait_seconds = pane.auto_rotate_wait_seconds;
+        settings.auto_rotate.speed = pane.auto_rotate_speed;
+        settings.zoom_limits.min_distance = min_distance;
+        settings.zoom_limits.max_distance = max_distance;
+
+        orbit.target_distance = pane.distance.clamp(min_distance, max_distance);
+        orbit.target_orthographic_scale = pane.orthographic_scale.clamp(
+            settings.zoom_limits.min_orthographic_scale,
+            settings.zoom_limits.max_orthographic_scale,
+        );
+    }
+}
+
+fn reflect_example_pane(
+    mut pane: ResMut<ExampleOrbitPane>,
+    cameras: Query<(&OrbitCamera, &OrbitCameraSettings)>,
+) {
+    let Some((orbit, settings)) = cameras.iter().next() else {
+        return;
+    };
+
+    pane.zoom_to_cursor = settings.mouse.zoom_to_cursor;
+    pane.distance = orbit.target_distance;
+    pane.orthographic_scale = orbit.target_orthographic_scale;
 }

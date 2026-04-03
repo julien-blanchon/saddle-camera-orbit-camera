@@ -38,6 +38,7 @@ fn main() {
         }),
         OrbitCameraPlugin::default(),
     ));
+    common::install_pane(&mut app);
     app.add_systems(Startup, setup);
     app.add_systems(Update, cycle_selection);
     app.run();
@@ -109,13 +110,20 @@ fn setup(
         ));
     }
 
+    let settings = saddle_camera_orbit_camera::OrbitCameraSettings::default();
+    let orbit = OrbitCamera::looking_at(common::DEFAULT_FOCUS, Vec3::new(-10.0, 6.0, 12.0));
+
     let camera = common::spawn_orbit_camera(
         &mut commands,
         "Fit Bounds Camera",
-        OrbitCamera::looking_at(common::DEFAULT_FOCUS, Vec3::new(-10.0, 6.0, 12.0)),
-        saddle_camera_orbit_camera::OrbitCameraSettings::default(),
+        orbit.clone(),
+        settings.clone(),
         Projection::Perspective(PerspectiveProjection::default()),
         true,
+    );
+    common::queue_example_pane(
+        &mut commands,
+        common::ExampleOrbitPane::from_setup(&orbit, &settings),
     );
 
     commands.insert_resource(FocusCycle {

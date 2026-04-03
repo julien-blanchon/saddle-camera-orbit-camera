@@ -18,6 +18,7 @@ fn main() {
         }),
         OrbitCameraPlugin::default(),
     ));
+    common::install_pane(&mut app);
     app.add_systems(Startup, setup);
     app.run();
 }
@@ -57,13 +58,14 @@ fn setup(
         pitch_limits: OrbitAngleLimit::new(-1.35, -0.35),
         ..OrbitCameraSettings::default()
     };
+    let orbit = OrbitCamera::looking_at(Vec3::new(0.0, 0.6, 0.0), Vec3::new(0.0, 18.0, 18.0))
+        .with_orthographic_scale(1.35);
 
     common::spawn_orbit_camera(
         &mut commands,
         "Orthographic Orbit Camera",
-        OrbitCamera::looking_at(Vec3::new(0.0, 0.6, 0.0), Vec3::new(0.0, 18.0, 18.0))
-            .with_orthographic_scale(1.35),
-        settings,
+        orbit.clone(),
+        settings.clone(),
         Projection::Orthographic(OrthographicProjection {
             scale: 1.35,
             scaling_mode: ScalingMode::FixedVertical {
@@ -72,5 +74,9 @@ fn setup(
             ..OrthographicProjection::default_3d()
         }),
         true,
+    );
+    common::queue_example_pane(
+        &mut commands,
+        common::ExampleOrbitPane::from_setup(&orbit, &settings),
     );
 }
