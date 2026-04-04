@@ -267,12 +267,16 @@ pub(crate) fn apply_pointer_input(
             _ => {}
         }
 
-        if let (Some(cursor), Some(anchor_before)) =
-            (current_cursor_position(&primary_window), cursor_anchor_before)
-            && let Some(anchor_after) =
-                predicted_cursor_focus_anchor(camera, &orbit, cursor)
+        if let (Some(cursor), Some(anchor_before)) = (
+            current_cursor_position(&primary_window),
+            cursor_anchor_before,
+        ) && let Some(anchor_after) = predicted_cursor_focus_anchor(camera, &orbit, cursor)
         {
-            apply_focus_translation(&mut orbit, follow.as_deref_mut(), anchor_before - anchor_after);
+            apply_focus_translation(
+                &mut orbit,
+                follow.as_deref_mut(),
+                anchor_before - anchor_after,
+            );
         }
     }
 
