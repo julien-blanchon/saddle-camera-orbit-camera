@@ -4953,8 +4953,10 @@ name = "saddle-camera-orbit-camera-example-basic"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_flair",
+ "bevy_input_focus",
+ "bevy_ui_widgets",
  "saddle-camera-orbit-camera",
- "saddle-camera-orbit-camera-example-common",
  "saddle-pane",
 ]
 
@@ -5015,8 +5017,10 @@ name = "saddle-camera-orbit-camera-example-touch-viewer"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_flair",
+ "bevy_input_focus",
+ "bevy_ui_widgets",
  "saddle-camera-orbit-camera",
- "saddle-camera-orbit-camera-example-common",
  "saddle-pane",
 ]
 
