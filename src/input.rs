@@ -355,11 +355,11 @@ fn apply_focus_translation(
         return;
     }
 
-    if let Some(follow) = follow {
-        if follow.enabled {
-            follow.offset += translation;
-            return;
-        }
+    if let Some(follow) = follow
+        && follow.enabled
+    {
+        follow.offset += translation;
+        return;
     }
 
     orbit.target_focus += translation;
