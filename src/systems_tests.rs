@@ -406,3 +406,102 @@ fn follow_target_uses_current_frame_transform_changes() {
     let camera = app.world().get::<OrbitCamera>(camera).unwrap();
     assert!((camera.target_focus - Vec3::new(3.0, 2.5, -4.0)).length() < 0.000_1);
 }
+
+#[test]
+fn reversed_zoom_inverts_scroll_direction() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .add_plugins(OrbitCameraPlugin::default());
+
+    let mut settings = OrbitCameraSettings::default();
+    settings.reversed_zoom = true;
+    settings.mouse.wheel_zoom_sensitivity = 0.2;
+
+    let entity = spawn_camera(
+        &mut app,
+        OrbitCamera::default(),
+        settings,
+        Projection::Perspective(PerspectiveProjection::default()),
+        true,
+    );
+
+    start_runtime(&mut app);
+    let home_distance = app
+        .world()
+        .get::<OrbitCamera>(entity)
+        .unwrap()
+        .home
+        .distance;
+
+    app.world_mut()
+        .resource_mut::<AccumulatedMouseScroll>()
+        .delta = Vec2::new(0.0, 4.0);
+    app.update();
+
+    let camera = app.world().get::<OrbitCamera>(entity).unwrap();
+    // Reversed zoom: positive scroll should zoom out (increase distance)
+    assert!(camera.target_distance > home_distance);
+}
+
+#[test]
+fn focus_bounds_clamp_target_focus_in_advance_state() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .add_plugins(OrbitCameraPlugin::default());
+
+    let mut settings = OrbitCameraSettings::default();
+    settings.focus_bounds = Some(crate::OrbitCameraFocusBounds::Cuboid {
+        min: Vec3::new(-5.0, -5.0, -5.0),
+        max: Vec3::new(5.0, 5.0, 5.0),
+    });
+
+    let mut camera = OrbitCamera::default();
+    camera.target_focus = Vec3::new(20.0, 0.0, 0.0);
+
+    let entity = spawn_camera(
+        &mut app,
+        camera,
+        settings,
+        Projection::Perspective(PerspectiveProjection::default()),
+        false,
+    );
+
+    start_runtime(&mut app);
+    app.update();
+
+    let camera = app.world().get::<OrbitCamera>(entity).unwrap();
+    assert!(camera.target_focus.x <= 5.0);
+}
+
+#[test]
+fn force_update_advances_state_while_disabled() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins)
+        .add_plugins(OrbitCameraPlugin::default());
+
+    let mut settings = OrbitCameraSettings::default();
+    settings.enabled = false;
+    settings.force_update = true;
+
+    let mut camera = OrbitCamera::default();
+    camera.target_yaw = 1.0;
+
+    let entity = spawn_camera(
+        &mut app,
+        camera,
+        settings,
+        Projection::Perspective(PerspectiveProjection::default()),
+        false,
+    );
+
+    start_runtime(&mut app);
+    app.update();
+
+    let camera = app.world().get::<OrbitCamera>(entity).unwrap();
+    // force_update should have allowed state advancement despite enabled=false
+    assert!(camera.yaw.abs() > 0.0);
+
+    // force_update should auto-reset
+    let settings = app.world().get::<OrbitCameraSettings>(entity).unwrap();
+    assert!(!settings.force_update);
+}

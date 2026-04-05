@@ -9,14 +9,22 @@ The crate is built for generic inspection and gameplay-adjacent navigation: mode
 - perspective and orthographic orbit cameras
 - focus-point inspection and tracked-entity follow
 - mouse orbit, pan, and wheel zoom
+- gamepad orbit (right-stick), pan (left-stick), and trigger zoom
 - preset front/back/left/right/top/bottom views for model-viewer workflows
 - touch orbit, two-finger pan, and pinch zoom
 - smoothing, pitch and yaw limits, zoom limits, and idle auto-rotate
+- inertia / momentum (flick to spin, configurable friction)
+- focus bounds (Sphere or Cuboid restriction on panning range)
+- dolly zoom (Hitchcock/vertigo effect — simultaneous distance + FOV adjustment)
+- camera collision avoidance infrastructure
+- configurable per-axis sensitivity and smoothness
+- reversed zoom, allow-upside-down orbit
+- force-update flag for programmatic driving while disabled
 - multiple cameras in one world with explicit input opt-in
 
 ## What It Is Not For
 
-- spring-arm collision avoidance
+- spring-arm collision avoidance with full physics integration (infrastructure is provided; scene picking is consumer-side)
 - shoulder offsets or combat aim rigs
 - lock-on or target-selection gameplay logic
 - hardcoded UI integration or editor gizmo policy
@@ -78,12 +86,20 @@ For examples and always-on tools, `OrbitCameraPlugin::always_on(Update)` is the 
 | `OrbitCameraPlugin` | Registers the runtime with injectable activate, deactivate, and update schedules |
 | `OrbitCameraSystems` | Public ordering hooks: `ReadInput`, `ApplyIntent`, `SyncTransform` |
 | `OrbitCamera` | Main controller component containing current state, target state, and home view |
-| `OrbitCameraSettings` | Input, limits, smoothing, and auto-rotate tuning surface |
+| `OrbitCameraSettings` | Input, limits, smoothing, inertia, focus bounds, and auto-rotate tuning surface |
 | `OrbitCameraPresetView` | Named front/back/left/right/top/bottom view targets for editor and model-viewer UX |
 | `OrbitCameraInputTarget` | Opt-in marker for which camera should consume shared pointer input |
 | `OrbitCameraFollow` | Optional follow-target component that keeps focus attached to an entity |
+| `OrbitCameraDollyZoom` | Optional component for the Hitchcock/vertigo dolly zoom effect |
+| `OrbitCameraCollision` | Optional component for camera collision avoidance infrastructure |
 | `OrbitAngleLimit`, `OrbitZoomLimits` | Reusable limit types for pitch, yaw, distance, and orthographic scale |
 | `OrbitCameraHome` | Stored reset view for `reset_to_home()` |
+| `OrbitCameraMouseControls` | Per-axis mouse orbit/pan/zoom sensitivity and button bindings |
+| `OrbitCameraTouchControls` | Touch orbit/pan/pinch sensitivity and enable toggle |
+| `OrbitCameraGamepadControls` | Gamepad orbit/pan/zoom sensitivity, deadzone, and enable toggle |
+| `OrbitCameraSmoothing` | Decay rates for rotation, focus, and zoom smoothing |
+| `OrbitCameraInertia` | Friction settings for orbit, pan, and zoom momentum |
+| `OrbitCameraFocusBounds` | Sphere or Cuboid restriction on panning range |
 
 ## Input Model
 
@@ -91,6 +107,8 @@ For examples and always-on tools, `OrbitCameraPlugin::always_on(Update)` is the 
   Left drag orbits by default, middle drag pans, wheel zooms.
 - Touch:
   One finger orbits, two fingers pan, pinch zooms.
+- Gamepad:
+  Right-stick orbits, left-stick pans, triggers zoom. Enable with `settings.gamepad.enabled = true`.
 - Multi-camera safety:
   Only entities marked with `OrbitCameraInputTarget` receive shared pointer input. If several active cameras have the marker, the highest `Camera.order` wins.
 - UI gating:
@@ -104,6 +122,7 @@ The runtime is intentionally easy to drive from gameplay or tooling code:
 - call `focus_on`, `reset_to_home`, `capture_home_from_current`, `frame_sphere`, or `frame_aabb`
 - call `set_preset_view` to jump or blend toward a named orthographic-style view
 - add `OrbitCameraFollow` to preserve orbit angles while tracking an entity
+- set `settings.force_update = true` to advance state for one frame even while `enabled = false`
 
 If your app uses `bevy_enhanced_input`, keep that layer in consumer code and write its actions into the public `OrbitCamera` component instead of coupling the shared crate to BEI directly.
 
@@ -114,6 +133,7 @@ If your app uses `bevy_enhanced_input`, keep that layer in consumer code and wri
 | Perspective orbit | Orbit around a focus point, pan on the camera plane, zoom by changing orbit distance |
 | Orthographic overview | Orbit with the same state model, zoom by changing `OrthographicProjection::scale` |
 | Follow target | Keep focus attached to an entity while preserving the current yaw, pitch, and zoom |
+| Dolly zoom | Simultaneous distance + FOV adjustment for Hitchcock/vertigo effect |
 
 ## Examples
 
@@ -125,6 +145,8 @@ If your app uses `bevy_enhanced_input`, keep that layer in consumer code and wri
 | `follow_target` | Moving tracked target while orbit and zoom stay interactive | `cargo run -p saddle-camera-orbit-camera-example-follow-target` |
 | `fit_bounds` | Public framing helpers cycling between several authored bounds | `cargo run -p saddle-camera-orbit-camera-example-fit-bounds` |
 | `touch_viewer` | Touch-first product-viewer layout using the same runtime, including cursor-aware mouse zoom | `cargo run -p saddle-camera-orbit-camera-example-touch-viewer` |
+| `product_viewer` | Product viewer with inertia, auto-rotate, gamepad support, and auto-framing | `cargo run -p saddle-camera-orbit-camera-example-product-viewer` |
+| `level_editor` | Level-editor camera with focus bounds, dolly zoom toggle, and keyboard preset views | `cargo run -p saddle-camera-orbit-camera-example-level-editor` |
 
 ## Workspace Lab
 
@@ -143,9 +165,9 @@ cargo run -p saddle-camera-orbit-camera-lab --features e2e -- orbit_camera_input
 ## System Ordering
 
 - `OrbitCameraSystems::ReadInput`:
-  Aggregate touch gestures and consume the shared mouse and touch input path.
+  Aggregate touch gestures, consume shared mouse, touch, and gamepad input.
 - `OrbitCameraSystems::ApplyIntent`:
-  Tick idle timers, resolve follow targets, apply auto-rotate, clamp target state, and smooth toward it.
+  Tick idle timers, resolve follow targets, apply auto-rotate, apply inertia, clamp target state (including focus bounds), smooth toward it, apply dolly zoom, and update collision.
 - `OrbitCameraSystems::SyncTransform`:
   Write the final `Transform` and orthographic projection scale in `PostUpdate` before transform propagation.
 

@@ -11,8 +11,8 @@ use saddle_bevy_e2e::{
     scenario::Scenario,
 };
 use saddle_camera_orbit_camera::{
-    OrbitCamera, OrbitCameraFollow, OrbitCameraInputTarget, OrbitCameraPresetView,
-    OrbitCameraSettings, OrbitCameraSystems,
+    OrbitCamera, OrbitCameraFocusBounds, OrbitCameraFollow, OrbitCameraInputTarget,
+    OrbitCameraPresetView, OrbitCameraSettings, OrbitCameraSystems,
 };
 
 use crate::{LabCameraEntity, LabTargetEntity};
@@ -70,6 +70,8 @@ fn scenario_by_name(name: &str) -> Option<Scenario> {
         "orbit_camera_preset_views" => Some(build_preset_views()),
         "orbit_camera_zoom_to_cursor" => Some(build_zoom_to_cursor()),
         "snap_orbit_camera_ortho" => Some(build_orthographic_snapshot()),
+        "orbit_camera_focus_bounds" => Some(build_focus_bounds()),
+        "orbit_camera_force_update" => Some(build_force_update()),
         _ => None,
     }
 }
@@ -82,6 +84,8 @@ fn list_scenarios() -> Vec<&'static str> {
         "orbit_camera_preset_views",
         "orbit_camera_zoom_to_cursor",
         "snap_orbit_camera_ortho",
+        "orbit_camera_focus_bounds",
+        "orbit_camera_force_update",
     ]
 }
 
@@ -317,6 +321,73 @@ fn build_orthographic_snapshot() -> Scenario {
         }))
         .then(assertions::log_summary("snap_orbit_camera_ortho summary"))
         .then(Action::Screenshot("snap_orbit_camera_ortho".into()))
+        .then(Action::WaitFrames(1))
+        .build()
+}
+
+fn build_focus_bounds() -> Scenario {
+    Scenario::builder("orbit_camera_focus_bounds")
+        .description(
+            "Enable focus bounds on the camera, push the target focus far outside, and verify the advance_state system clamps it within the authored boundary.",
+        )
+        .then(Action::WaitFrames(30))
+        .then(Action::Custom(Box::new(|world| {
+            let entity = camera_entity(world);
+            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
+                settings.focus_bounds = Some(OrbitCameraFocusBounds::Cuboid {
+                    min: Vec3::new(-5.0, -5.0, -5.0),
+                    max: Vec3::new(5.0, 5.0, 5.0),
+                });
+            }
+            let mut camera = world
+                .get_mut::<OrbitCamera>(entity)
+                .expect("orbit camera should exist");
+            camera.target_focus = Vec3::new(50.0, 50.0, 50.0);
+        })))
+        .then(Action::WaitFrames(4))
+        .then(assertions::custom("focus is clamped within cuboid bounds", |world| {
+            let orbit = camera_state(world);
+            orbit.target_focus.x <= 5.0
+                && orbit.target_focus.y <= 5.0
+                && orbit.target_focus.z <= 5.0
+        }))
+        .then(assertions::log_summary("orbit_camera_focus_bounds summary"))
+        .then(Action::Screenshot("orbit_camera_focus_bounds".into()))
+        .then(Action::WaitFrames(1))
+        .build()
+}
+
+fn build_force_update() -> Scenario {
+    Scenario::builder("orbit_camera_force_update")
+        .description(
+            "Disable the camera, set force_update=true, move the target, and verify the camera still advances toward its target state for one frame.",
+        )
+        .then(Action::WaitFrames(30))
+        .then(Action::Custom(Box::new(|world| {
+            let entity = camera_entity(world);
+            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
+                settings.enabled = false;
+                settings.force_update = true;
+            }
+            let mut camera = world
+                .get_mut::<OrbitCamera>(entity)
+                .expect("orbit camera should exist");
+            camera.target_yaw = 2.0;
+        })))
+        .then(Action::WaitFrames(2))
+        .then(assertions::custom("force_update advances disabled camera", |world| {
+            let orbit = camera_state(world);
+            orbit.yaw.abs() > 0.01
+        }))
+        .then(assertions::custom("force_update auto-resets", |world| {
+            let entity = camera_entity(world);
+            let settings = world
+                .get::<OrbitCameraSettings>(entity)
+                .expect("settings should exist");
+            !settings.force_update
+        }))
+        .then(assertions::log_summary("orbit_camera_force_update summary"))
+        .then(Action::Screenshot("orbit_camera_force_update".into()))
         .then(Action::WaitFrames(1))
         .build()
 }

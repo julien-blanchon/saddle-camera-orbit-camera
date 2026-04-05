@@ -9,12 +9,18 @@
 | `enabled` | `bool` | `true` | `true` or `false` | Turns the runtime update path on or off for that camera | When `false`, the camera stops consuming input and stops smoothing toward target state |
 | `mouse` | `OrbitCameraMouseControls` | see below | per field | Desktop orbit, pan, and wheel tuning | Applies only to cameras with `OrbitCameraInputTarget` |
 | `touch` | `OrbitCameraTouchControls` | see below | per field | Touch orbit, pan, and pinch tuning | Touch input is ignored when `touch.enabled` is `false` |
-| `inversion` | `OrbitAxisInversion` | all `false` | per field | Per-axis inversion for orbit, pan, and zoom | Shared between mouse and touch |
+| `gamepad` | `OrbitCameraGamepadControls` | see below | per field | Gamepad orbit, pan, and zoom tuning | Gamepad input is ignored when `gamepad.enabled` is `false` |
+| `inversion` | `OrbitAxisInversion` | all `false` | per field | Per-axis inversion for orbit, pan, and zoom | Shared between mouse, touch, and gamepad |
 | `pitch_limits` | `OrbitAngleLimit` | `[-1.45, 1.45]` | any finite radians with `min <= max` | Clamp for `target_pitch` | Keep away from `+-PI/2` singularities unless you intentionally want near-pole views |
 | `yaw_limits` | `Option<OrbitAngleLimit>` | `None` | `None` or any finite radians with `min <= max` | Optional clamp for `target_yaw` | `None` means full 360-degree orbit |
 | `zoom_limits` | `OrbitZoomLimits` | see below | positive finite values | Clamp for perspective distance and orthographic scale | Perspective uses `distance`; orthographic uses `OrthographicProjection::scale` |
 | `smoothing` | `OrbitCameraSmoothing` | see below | non-negative finite values | Decay rates for rotation, focus, and zoom smoothing | `0.0` means snap immediately to target |
 | `auto_rotate` | `OrbitCameraAutoRotate` | disabled | see below | Idle auto-rotation config | Useful for product viewers and photo-mode idles |
+| `inertia` | `OrbitCameraInertia` | disabled | see below | Friction settings for orbit, pan, and zoom momentum | Flick to spin, release to decelerate |
+| `focus_bounds` | `Option<OrbitCameraFocusBounds>` | `None` | see below | Restricts `target_focus` within a Sphere or Cuboid | Prevents panning outside the authored play area |
+| `allow_upside_down` | `bool` | `false` | `true` or `false` | Allows pitch to exceed ±PI/2, enabling upside-down orbit | Horizontal orbit auto-reverses when upside-down |
+| `reversed_zoom` | `bool` | `false` | `true` or `false` | Inverts the zoom direction for wheel and pinch | Useful for trackball-style navigation preferences |
+| `force_update` | `bool` | `false` | `true` or `false` | Forces one frame of state advancement even while `enabled` is `false` | Auto-resets to `false` after one frame |
 
 ## `OrbitCameraMouseControls`
 
@@ -35,6 +41,16 @@
 | `orbit_sensitivity` | `Vec2` | `(0.01, 0.01)` | non-negative finite values | Orbit radians per touch pixel on X and Y | One finger drives orbit |
 | `pan_sensitivity` | `f32` | `1.0` | non-negative finite values | Multiplier for two-finger pan drag | Uses the same world-space pan scaling rules as mouse panning |
 | `pinch_zoom_sensitivity` | `f32` | `0.01` | non-negative finite values | Multiplier for pinch-distance delta | Positive pinch growth zooms in by default |
+
+## `OrbitCameraGamepadControls`
+
+| Field | Type | Default | Valid Range | Effect | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `enabled` | `bool` | `false` | `true` or `false` | Enables gamepad input handling | Set to `true` to enable gamepad orbit, pan, and zoom |
+| `orbit_sensitivity` | `Vec2` | `(2.5, 2.5)` | non-negative finite values | Orbit speed in radians/sec per stick axis | Right-stick drives orbit |
+| `zoom_sensitivity` | `f32` | `3.0` | non-negative finite values | Zoom speed per trigger axis value | Right trigger zooms in, left trigger zooms out |
+| `pan_sensitivity` | `f32` | `8.0` | non-negative finite values | Pan speed in world-space units/sec per stick axis | Left-stick drives pan |
+| `deadzone` | `f32` | `0.15` | `0.0..1.0` | Stick deadzone threshold | Values below this are ignored |
 
 ## `OrbitAxisInversion`
 
@@ -72,6 +88,45 @@ Higher decay means a snappier camera. `0.0` disables smoothing for that channel 
 | `enabled` | `bool` | `false` | `true` or `false` | Enables idle auto-rotation | Useful for model viewers and attract loops |
 | `wait_seconds` | `f32` | `2.0` | `>= 0` | Idle time before the camera starts rotating | Resets whenever manual input fires |
 | `speed` | `f32` | `0.45` | any finite radians per second | Yaw speed applied while idle | Positive values rotate clockwise around world-up |
+
+## `OrbitCameraInertia`
+
+| Field | Type | Default | Valid Range | Effect | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `enabled` | `bool` | `false` | `true` or `false` | Enables inertia/momentum for orbit, pan, and zoom | Camera continues moving after input stops |
+| `orbit_friction` | `f32` | `5.0` | `> 0` | Exponential decay rate for orbit velocity | Higher values stop faster |
+| `pan_friction` | `f32` | `6.0` | `> 0` | Exponential decay rate for pan velocity | Higher values stop faster |
+| `zoom_friction` | `f32` | `8.0` | `> 0` | Exponential decay rate for zoom velocity | Higher values stop faster |
+
+## `OrbitCameraFocusBounds`
+
+An enum with two variants:
+
+| Variant | Fields | Effect |
+| --- | --- | --- |
+| `Sphere` | `center: Vec3`, `radius: f32` | Restricts `target_focus` within a sphere |
+| `Cuboid` | `min: Vec3`, `max: Vec3` | Restricts `target_focus` within an axis-aligned box |
+
+Set via `settings.focus_bounds = Some(OrbitCameraFocusBounds::Cuboid { min, max })`.
+
+## `OrbitCameraDollyZoom`
+
+An optional component added alongside `OrbitCamera` for the Hitchcock/vertigo effect.
+
+| Field | Type | Default | Valid Range | Effect | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `enabled` | `bool` | `false` | `true` or `false` | Activates simultaneous distance + FOV adjustment | FOV is computed as `2 * atan(reference_width / (2 * distance))` |
+| `reference_width` | `f32` | `4.0` | `> 0` | The world-space width to maintain at the focus point | Determines how dramatic the effect is |
+
+## `OrbitCameraCollision`
+
+An optional component that provides collision avoidance infrastructure.
+
+| Field | Type | Default | Valid Range | Effect | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `enabled` | `bool` | `true` | `true` or `false` | Enables collision distance override | When collision_distance is set on internal state, camera pulls forward |
+| `min_distance` | `f32` | `0.3` | `>= 0` | Minimum camera distance after collision | Prevents clipping into geometry |
+| `smooth_speed` | `f32` | `12.0` | `> 0` | How quickly the collision distance relaxes back to full orbit distance | Higher is snappier |
 
 ## `OrbitCamera`
 

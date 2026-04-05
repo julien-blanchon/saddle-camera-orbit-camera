@@ -4,9 +4,11 @@ mod math;
 mod systems;
 
 pub use components::{
-    OrbitAngleLimit, OrbitAxisInversion, OrbitCamera, OrbitCameraAutoRotate, OrbitCameraFollow,
-    OrbitCameraHome, OrbitCameraInputTarget, OrbitCameraMouseControls, OrbitCameraPresetView,
-    OrbitCameraSettings, OrbitCameraSmoothing, OrbitCameraTouchControls, OrbitZoomLimits,
+    OrbitAngleLimit, OrbitAxisInversion, OrbitCamera, OrbitCameraAutoRotate, OrbitCameraCollision,
+    OrbitCameraDollyZoom, OrbitCameraFocusBounds, OrbitCameraFollow, OrbitCameraGamepadControls,
+    OrbitCameraHome, OrbitCameraInertia, OrbitCameraInputTarget, OrbitCameraMouseControls,
+    OrbitCameraPresetView, OrbitCameraSettings, OrbitCameraSmoothing, OrbitCameraTouchControls,
+    OrbitZoomLimits,
 };
 pub use math::{
     apply_exponential_zoom, fit_orthographic_scale_for_sphere, fit_perspective_distance_for_sphere,
@@ -88,8 +90,13 @@ impl Plugin for OrbitCameraPlugin {
             .register_type::<OrbitAxisInversion>()
             .register_type::<OrbitCamera>()
             .register_type::<OrbitCameraAutoRotate>()
+            .register_type::<OrbitCameraCollision>()
+            .register_type::<OrbitCameraDollyZoom>()
+            .register_type::<OrbitCameraFocusBounds>()
             .register_type::<OrbitCameraFollow>()
+            .register_type::<OrbitCameraGamepadControls>()
             .register_type::<OrbitCameraHome>()
+            .register_type::<OrbitCameraInertia>()
             .register_type::<OrbitCameraInputTarget>()
             .register_type::<OrbitCameraMouseControls>()
             .register_type::<OrbitCameraPresetView>()
@@ -109,7 +116,11 @@ impl Plugin for OrbitCameraPlugin {
             )
             .add_systems(
                 self.update_schedule,
-                (input::capture_touch_gestures, input::apply_pointer_input)
+                (
+                    input::capture_touch_gestures,
+                    input::apply_pointer_input,
+                    input::apply_gamepad_input,
+                )
                     .chain()
                     .in_set(OrbitCameraSystems::ReadInput)
                     .run_if(runtime_is_active),
@@ -120,7 +131,10 @@ impl Plugin for OrbitCameraPlugin {
                     systems::tick_idle_timers,
                     systems::sync_follow_targets,
                     systems::apply_auto_rotate,
+                    systems::apply_inertia,
                     systems::advance_state,
+                    systems::apply_dolly_zoom,
+                    systems::update_collision,
                 )
                     .chain()
                     .in_set(OrbitCameraSystems::ApplyIntent)

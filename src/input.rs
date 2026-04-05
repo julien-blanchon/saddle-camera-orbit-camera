@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use bevy::{
     input::{
+        gamepad::GamepadAxis,
         mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
         touch::{TouchInput, TouchPhase},
     },
@@ -201,17 +202,40 @@ pub(crate) fn apply_pointer_input(
                 * settings.touch.pan_sensitivity,
     );
 
-    let zoom_delta = apply_inversion(
-        scroll.y * settings.mouse.wheel_zoom_sensitivity,
-        settings.inversion.zoom,
-    ) + apply_inversion(
-        touch_pinch * settings.touch.pinch_zoom_sensitivity,
-        settings.inversion.zoom,
-    );
+    let zoom_sign = if settings.reversed_zoom { -1.0 } else { 1.0 };
+    let zoom_delta = zoom_sign
+        * (apply_inversion(
+            scroll.y * settings.mouse.wheel_zoom_sensitivity,
+            settings.inversion.zoom,
+        ) + apply_inversion(
+            touch_pinch * settings.touch.pinch_zoom_sensitivity,
+            settings.inversion.zoom,
+        ));
 
     if orbit_delta.length_squared() > 0.0 {
-        orbit.target_yaw = wrap_angle(orbit.target_yaw - orbit_delta.x);
-        orbit.target_pitch += orbit_delta.y;
+        let effective_orbit = if settings.allow_upside_down {
+            let is_upside_down =
+                orbit.pitch.rem_euclid(std::f32::consts::TAU) > std::f32::consts::PI;
+            let x = if is_upside_down {
+                -orbit_delta.x
+            } else {
+                orbit_delta.x
+            };
+            Vec2::new(x, orbit_delta.y)
+        } else {
+            orbit_delta
+        };
+        orbit.target_yaw = wrap_angle(orbit.target_yaw - effective_orbit.x);
+        orbit.target_pitch += effective_orbit.y;
+
+        if settings.inertia.enabled {
+            internal.orbit_velocity = effective_orbit;
+        }
+    } else if settings.inertia.enabled
+        && buttons.is_some_and(|pressed| !pressed.pressed(settings.mouse.orbit_button))
+        && touch_frame.active_touch_count == 0
+    {
+        // Pointer released — inertia will take over in the inertia system
     }
 
     if pan_pixels.length_squared() > 0.0 {
@@ -244,6 +268,10 @@ pub(crate) fn apply_pointer_input(
             }
         } else {
             orbit.target_focus += translation;
+        }
+
+        if settings.inertia.enabled {
+            internal.pan_velocity = translation / time_delta_or_default(0.016);
         }
     }
 
@@ -278,6 +306,10 @@ pub(crate) fn apply_pointer_input(
                 anchor_before - anchor_after,
             );
         }
+
+        if settings.inertia.enabled {
+            internal.zoom_velocity = zoom_delta * 4.0;
+        }
     }
 
     if orbit_delta.length_squared() > 0.0
@@ -285,6 +317,89 @@ pub(crate) fn apply_pointer_input(
         || zoom_delta.abs() > f32::EPSILON
     {
         internal.manual_interaction_this_frame = true;
+        // Clear inertia velocities that conflict with current active input
+        if orbit_delta.length_squared() > 0.0 {
+            // Orbit velocity is set above, don't clear
+        }
+        if pan_pixels.length_squared() > 0.0 {
+            // Pan velocity is set above, don't clear
+        }
+    }
+}
+
+pub(crate) fn apply_gamepad_input(
+    time: Res<Time>,
+    gamepads: Query<&Gamepad>,
+    mut cameras: Query<
+        (
+            &mut OrbitCamera,
+            &OrbitCameraSettings,
+            &mut OrbitCameraInternalState,
+        ),
+        With<OrbitCameraInputTarget>,
+    >,
+) {
+    let dt = time.delta_secs();
+    let Some(gamepad) = gamepads.iter().next() else {
+        return;
+    };
+
+    for (mut orbit, settings, mut internal) in &mut cameras {
+        if !settings.enabled || !settings.gamepad.enabled {
+            continue;
+        }
+
+        let deadzone = settings.gamepad.deadzone;
+
+        let right_x = apply_deadzone(
+            gamepad.get(GamepadAxis::RightStickX).unwrap_or(0.0),
+            deadzone,
+        );
+        let right_y = apply_deadzone(
+            gamepad.get(GamepadAxis::RightStickY).unwrap_or(0.0),
+            deadzone,
+        );
+
+        let left_x = apply_deadzone(
+            gamepad.get(GamepadAxis::LeftStickX).unwrap_or(0.0),
+            deadzone,
+        );
+        let left_y = apply_deadzone(
+            gamepad.get(GamepadAxis::LeftStickY).unwrap_or(0.0),
+            deadzone,
+        );
+
+        let orbit_input = Vec2::new(right_x, -right_y);
+        if orbit_input.length_squared() > 0.0 {
+            let scaled = orbit_input * settings.gamepad.orbit_sensitivity * dt;
+            let effective_x = apply_inversion(scaled.x, settings.inversion.orbit_x);
+            let effective_y = apply_inversion(scaled.y, settings.inversion.orbit_y);
+            orbit.target_yaw = wrap_angle(orbit.target_yaw - effective_x);
+            orbit.target_pitch += effective_y;
+            internal.manual_interaction_this_frame = true;
+        }
+
+        let pan_input = Vec2::new(left_x, -left_y);
+        if pan_input.length_squared() > 0.0 {
+            let rotation = crate::orbit_rotation(orbit.yaw, orbit.pitch);
+            let scaled = pan_input * settings.gamepad.pan_sensitivity * dt;
+            let translation = rotation * Vec3::new(-scaled.x, scaled.y, 0.0);
+            orbit.target_focus += translation;
+            internal.manual_interaction_this_frame = true;
+        }
+
+        let left_trigger = gamepad.get(GamepadAxis::LeftZ).unwrap_or(0.0).max(0.0);
+        let right_trigger = gamepad.get(GamepadAxis::RightZ).unwrap_or(0.0).max(0.0);
+        let zoom_input = right_trigger - left_trigger;
+        if zoom_input.abs() > 0.01 {
+            let zoom_sign = if settings.reversed_zoom { -1.0 } else { 1.0 };
+            let zoom_delta = apply_inversion(
+                zoom_input * settings.gamepad.zoom_sensitivity * dt * zoom_sign,
+                settings.inversion.zoom,
+            );
+            orbit.target_distance = apply_exponential_zoom(orbit.target_distance, zoom_delta, 1.0);
+            internal.manual_interaction_this_frame = true;
+        }
     }
 }
 
@@ -303,6 +418,14 @@ fn select_input_target(
 
 fn apply_inversion(value: f32, inverted: bool) -> f32 {
     if inverted { -value } else { value }
+}
+
+fn apply_deadzone(value: f32, deadzone: f32) -> f32 {
+    if value.abs() < deadzone {
+        0.0
+    } else {
+        (value - value.signum() * deadzone) / (1.0 - deadzone)
+    }
 }
 
 fn current_cursor_position(windows: &Query<&Window, With<PrimaryWindow>>) -> Option<Vec2> {
@@ -363,4 +486,8 @@ fn apply_focus_translation(
     }
 
     orbit.target_focus += translation;
+}
+
+fn time_delta_or_default(default: f32) -> f32 {
+    default
 }

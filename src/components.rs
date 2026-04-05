@@ -139,6 +139,27 @@ impl Default for OrbitCameraTouchControls {
 }
 
 #[derive(Reflect, Debug, Clone, Copy, PartialEq)]
+pub struct OrbitCameraGamepadControls {
+    pub enabled: bool,
+    pub orbit_sensitivity: Vec2,
+    pub zoom_sensitivity: f32,
+    pub pan_sensitivity: f32,
+    pub deadzone: f32,
+}
+
+impl Default for OrbitCameraGamepadControls {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            orbit_sensitivity: Vec2::splat(2.5),
+            zoom_sensitivity: 3.0,
+            pan_sensitivity: 8.0,
+            deadzone: 0.15,
+        }
+    }
+}
+
+#[derive(Reflect, Debug, Clone, Copy, PartialEq)]
 pub struct OrbitCameraSmoothing {
     pub rotation_decay: f32,
     pub focus_decay: f32,
@@ -172,18 +193,70 @@ impl Default for OrbitCameraAutoRotate {
     }
 }
 
+#[derive(Reflect, Debug, Clone, Copy, PartialEq)]
+pub struct OrbitCameraInertia {
+    pub enabled: bool,
+    pub orbit_friction: f32,
+    pub pan_friction: f32,
+    pub zoom_friction: f32,
+}
+
+impl Default for OrbitCameraInertia {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            orbit_friction: 5.0,
+            pan_friction: 6.0,
+            zoom_friction: 8.0,
+        }
+    }
+}
+
+#[derive(Reflect, Debug, Clone, Copy, PartialEq)]
+pub enum OrbitCameraFocusBounds {
+    Sphere { center: Vec3, radius: f32 },
+    Cuboid { min: Vec3, max: Vec3 },
+}
+
+impl OrbitCameraFocusBounds {
+    pub fn clamp_focus(self, focus: Vec3) -> Vec3 {
+        match self {
+            Self::Sphere { center, radius } => {
+                let offset = focus - center;
+                let distance = offset.length();
+                if distance <= radius || distance < f32::EPSILON {
+                    focus
+                } else {
+                    center + offset / distance * radius
+                }
+            }
+            Self::Cuboid { min, max } => Vec3::new(
+                focus.x.clamp(min.x, max.x),
+                focus.y.clamp(min.y, max.y),
+                focus.z.clamp(min.z, max.z),
+            ),
+        }
+    }
+}
+
 #[derive(Component, Reflect, Debug, Clone)]
 #[reflect(Component)]
 pub struct OrbitCameraSettings {
     pub enabled: bool,
     pub mouse: OrbitCameraMouseControls,
     pub touch: OrbitCameraTouchControls,
+    pub gamepad: OrbitCameraGamepadControls,
     pub inversion: OrbitAxisInversion,
     pub pitch_limits: OrbitAngleLimit,
     pub yaw_limits: Option<OrbitAngleLimit>,
     pub zoom_limits: OrbitZoomLimits,
     pub smoothing: OrbitCameraSmoothing,
     pub auto_rotate: OrbitCameraAutoRotate,
+    pub inertia: OrbitCameraInertia,
+    pub focus_bounds: Option<OrbitCameraFocusBounds>,
+    pub allow_upside_down: bool,
+    pub reversed_zoom: bool,
+    pub force_update: bool,
 }
 
 impl Default for OrbitCameraSettings {
@@ -192,12 +265,18 @@ impl Default for OrbitCameraSettings {
             enabled: true,
             mouse: OrbitCameraMouseControls::default(),
             touch: OrbitCameraTouchControls::default(),
+            gamepad: OrbitCameraGamepadControls::default(),
             inversion: OrbitAxisInversion::default(),
             pitch_limits: OrbitAngleLimit::default(),
             yaw_limits: None,
             zoom_limits: OrbitZoomLimits::default(),
             smoothing: OrbitCameraSmoothing::default(),
             auto_rotate: OrbitCameraAutoRotate::default(),
+            inertia: OrbitCameraInertia::default(),
+            focus_bounds: None,
+            allow_upside_down: false,
+            reversed_zoom: false,
+            force_update: false,
         }
     }
 }
@@ -419,10 +498,57 @@ impl OrbitCameraFollow {
     }
 }
 
+#[derive(Component, Reflect, Debug, Clone, Copy, PartialEq)]
+#[reflect(Component)]
+pub struct OrbitCameraDollyZoom {
+    pub enabled: bool,
+    pub reference_width: f32,
+}
+
+impl OrbitCameraDollyZoom {
+    pub fn new(reference_width: f32) -> Self {
+        Self {
+            enabled: true,
+            reference_width,
+        }
+    }
+}
+
+impl Default for OrbitCameraDollyZoom {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            reference_width: 4.0,
+        }
+    }
+}
+
+#[derive(Component, Reflect, Debug, Clone, Copy, PartialEq)]
+#[reflect(Component)]
+pub struct OrbitCameraCollision {
+    pub enabled: bool,
+    pub min_distance: f32,
+    pub smooth_speed: f32,
+}
+
+impl Default for OrbitCameraCollision {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            min_distance: 0.3,
+            smooth_speed: 12.0,
+        }
+    }
+}
+
 #[derive(Component, Debug, Clone, Default)]
 pub(crate) struct OrbitCameraInternalState {
     pub idle_seconds: f32,
     pub manual_interaction_this_frame: bool,
+    pub orbit_velocity: Vec2,
+    pub pan_velocity: Vec3,
+    pub zoom_velocity: f32,
+    pub collision_distance: Option<f32>,
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{OrbitCamera, OrbitCameraPresetView};
+use crate::{OrbitCamera, OrbitCameraFocusBounds, OrbitCameraPresetView};
 
 #[test]
 fn looking_at_round_trips_focus_and_distance() {
@@ -62,4 +62,56 @@ fn preset_views_update_target_angles() {
 
     camera.set_preset_view(OrbitCameraPresetView::Top);
     assert!((camera.target_pitch - std::f32::consts::FRAC_PI_2).abs() < 0.000_1);
+}
+
+#[test]
+fn focus_bounds_sphere_clamps_outside_point() {
+    let bounds = OrbitCameraFocusBounds::Sphere {
+        center: Vec3::ZERO,
+        radius: 5.0,
+    };
+    let outside = Vec3::new(10.0, 0.0, 0.0);
+    let clamped = bounds.clamp_focus(outside);
+    assert!((clamped.length() - 5.0).abs() < 0.001);
+    assert!(clamped.x > 0.0);
+}
+
+#[test]
+fn focus_bounds_sphere_preserves_inside_point() {
+    let bounds = OrbitCameraFocusBounds::Sphere {
+        center: Vec3::ZERO,
+        radius: 10.0,
+    };
+    let inside = Vec3::new(3.0, 2.0, 1.0);
+    let clamped = bounds.clamp_focus(inside);
+    assert!((clamped - inside).length() < 0.001);
+}
+
+#[test]
+fn focus_bounds_cuboid_clamps_all_axes() {
+    let bounds = OrbitCameraFocusBounds::Cuboid {
+        min: Vec3::new(-5.0, -2.0, -3.0),
+        max: Vec3::new(5.0, 2.0, 3.0),
+    };
+    let outside = Vec3::new(10.0, -5.0, 8.0);
+    let clamped = bounds.clamp_focus(outside);
+    assert_eq!(clamped, Vec3::new(5.0, -2.0, 3.0));
+}
+
+#[test]
+fn snap_to_target_equalizes_current_and_target() {
+    let mut camera = OrbitCamera::default();
+    camera.target_yaw = 1.5;
+    camera.target_pitch = -0.3;
+    camera.target_distance = 20.0;
+    camera.target_focus = Vec3::new(5.0, 3.0, -2.0);
+    camera.target_orthographic_scale = 4.0;
+
+    camera.snap_to_target();
+
+    assert_eq!(camera.yaw, 1.5);
+    assert_eq!(camera.pitch, -0.3);
+    assert_eq!(camera.distance, 20.0);
+    assert_eq!(camera.focus, Vec3::new(5.0, 3.0, -2.0));
+    assert_eq!(camera.orthographic_scale, 4.0);
 }

@@ -4993,6 +4993,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "saddle-camera-orbit-camera-example-level-editor"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "saddle-camera-orbit-camera",
+ "saddle-camera-orbit-camera-example-common",
+ "saddle-pane",
+]
+
+[[package]]
 name = "saddle-camera-orbit-camera-example-orthographic"
 version = "0.1.0"
 dependencies = [
@@ -5004,6 +5014,16 @@ dependencies = [
 
 [[package]]
 name = "saddle-camera-orbit-camera-example-preset-views"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "saddle-camera-orbit-camera",
+ "saddle-camera-orbit-camera-example-common",
+ "saddle-pane",
+]
+
+[[package]]
+name = "saddle-camera-orbit-camera-example-product-viewer"
 version = "0.1.0"
 dependencies = [
  "bevy",

@@ -7,6 +7,8 @@ members = [
     "follow_target",
     "fit_bounds",
     "touch_viewer",
+    "product_viewer",
+    "level_editor",
     "lab",
 ]
 resolver = "3"
