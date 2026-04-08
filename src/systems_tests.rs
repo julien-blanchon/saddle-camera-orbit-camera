@@ -413,9 +413,14 @@ fn reversed_zoom_inverts_scroll_direction() {
     app.add_plugins(MinimalPlugins)
         .add_plugins(OrbitCameraPlugin::default());
 
-    let mut settings = OrbitCameraSettings::default();
-    settings.reversed_zoom = true;
-    settings.mouse.wheel_zoom_sensitivity = 0.2;
+    let settings = OrbitCameraSettings {
+        reversed_zoom: true,
+        mouse: crate::OrbitCameraMouseControls {
+            wheel_zoom_sensitivity: 0.2,
+            ..default()
+        },
+        ..default()
+    };
 
     let entity = spawn_camera(
         &mut app,
@@ -449,14 +454,18 @@ fn focus_bounds_clamp_target_focus_in_advance_state() {
     app.add_plugins(MinimalPlugins)
         .add_plugins(OrbitCameraPlugin::default());
 
-    let mut settings = OrbitCameraSettings::default();
-    settings.focus_bounds = Some(crate::OrbitCameraFocusBounds::Cuboid {
-        min: Vec3::new(-5.0, -5.0, -5.0),
-        max: Vec3::new(5.0, 5.0, 5.0),
-    });
+    let settings = OrbitCameraSettings {
+        focus_bounds: Some(crate::OrbitCameraFocusBounds::Cuboid {
+            min: Vec3::new(-5.0, -5.0, -5.0),
+            max: Vec3::new(5.0, 5.0, 5.0),
+        }),
+        ..default()
+    };
 
-    let mut camera = OrbitCamera::default();
-    camera.target_focus = Vec3::new(20.0, 0.0, 0.0);
+    let camera = OrbitCamera {
+        target_focus: Vec3::new(20.0, 0.0, 0.0),
+        ..default()
+    };
 
     let entity = spawn_camera(
         &mut app,
@@ -479,12 +488,16 @@ fn force_update_advances_state_while_disabled() {
     app.add_plugins(MinimalPlugins)
         .add_plugins(OrbitCameraPlugin::default());
 
-    let mut settings = OrbitCameraSettings::default();
-    settings.enabled = false;
-    settings.force_update = true;
+    let settings = OrbitCameraSettings {
+        enabled: false,
+        force_update: true,
+        ..default()
+    };
 
-    let mut camera = OrbitCamera::default();
-    camera.target_yaw = 1.0;
+    let camera = OrbitCamera {
+        target_yaw: 1.0,
+        ..default()
+    };
 
     let entity = spawn_camera(
         &mut app,

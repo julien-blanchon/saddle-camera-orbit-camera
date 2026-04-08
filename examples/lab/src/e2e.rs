@@ -72,6 +72,8 @@ fn scenario_by_name(name: &str) -> Option<Scenario> {
         "snap_orbit_camera_ortho" => Some(build_orthographic_snapshot()),
         "orbit_camera_focus_bounds" => Some(build_focus_bounds()),
         "orbit_camera_force_update" => Some(build_force_update()),
+        "orbit_camera_auto_rotate" => Some(build_auto_rotate()),
+        "orbit_camera_inertia" => Some(build_inertia()),
         _ => None,
     }
 }
@@ -86,6 +88,8 @@ fn list_scenarios() -> Vec<&'static str> {
         "snap_orbit_camera_ortho",
         "orbit_camera_focus_bounds",
         "orbit_camera_force_update",
+        "orbit_camera_auto_rotate",
+        "orbit_camera_inertia",
     ]
 }
 
@@ -390,6 +394,117 @@ fn build_force_update() -> Scenario {
         .then(Action::Screenshot("orbit_camera_force_update".into()))
         .then(Action::WaitFrames(1))
         .build()
+}
+
+fn build_auto_rotate() -> Scenario {
+    Scenario::builder("orbit_camera_auto_rotate")
+        .description(
+            "Enable auto-rotate with a short idle wait, then verify the camera yaw advances \
+             autonomously without any user input. Disable auto-rotate and confirm yaw stabilises.",
+        )
+        .then(Action::WaitFrames(30))
+        // Enable auto-rotate: 0.5 s idle wait, 1.2 rad/s speed.
+        .then(Action::Custom(Box::new(|world| {
+            let entity = camera_entity(world);
+            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
+                settings.auto_rotate = saddle_camera_orbit_camera::OrbitCameraAutoRotate {
+                    enabled: true,
+                    wait_seconds: 0.5,
+                    speed: 1.2,
+                };
+            }
+        })))
+        // Wait past the idle threshold (0.5 s = 30 frames) then an extra 60 frames for movement.
+        .then(Action::WaitFrames(90))
+        .then(assertions::custom("yaw changed due to auto-rotate", |world| {
+            let orbit = camera_state(world);
+            (orbit.yaw - orbit.home.yaw).abs() > 0.08
+        }))
+        .then(assertions::log_summary("orbit_camera_auto_rotate active summary"))
+        .then(Action::Screenshot("orbit_camera_auto_rotate_active".into()))
+        .then(Action::WaitFrames(1))
+        // Disable auto-rotate and capture a stable yaw.
+        .then(Action::Custom(Box::new(|world| {
+            let entity = camera_entity(world);
+            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
+                settings.auto_rotate.enabled = false;
+            }
+        })))
+        .then(Action::WaitFrames(30))
+        .then(assertions::custom("yaw no longer advances after disable", |world| {
+            let orbit = camera_state(world);
+            // Yaw should be stable: target_yaw and yaw should be converging.
+            (orbit.target_yaw - orbit.yaw).abs() < 0.3
+        }))
+        .then(assertions::log_summary("orbit_camera_auto_rotate summary"))
+        .then(inspect::dump_component_json::<OrbitCamera>("orbit_camera_auto_rotate_state"))
+        .then(Action::Screenshot("orbit_camera_auto_rotate_disabled".into()))
+        .then(Action::WaitFrames(1))
+        .build()
+}
+
+fn build_inertia() -> Scenario {
+    Scenario::builder("orbit_camera_inertia")
+        .description(
+            "Enable inertia, apply a quick orbit drag via mouse motion, release, then verify \
+             that the yaw target continues to coast past the drag endpoint (momentum carry-through) \
+             before friction brings it to rest.",
+        )
+        .then(Action::WaitFrames(30))
+        // Enable inertia with low friction so momentum is clearly visible.
+        .then(Action::Custom(Box::new(|world| {
+            let entity = camera_entity(world);
+            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
+                settings.inertia = saddle_camera_orbit_camera::OrbitCameraInertia {
+                    enabled: true,
+                    orbit_friction: 2.0,
+                    pan_friction: 3.0,
+                    zoom_friction: 4.0,
+                };
+            }
+        })))
+        .then(Action::Screenshot("orbit_camera_inertia_before".into()))
+        .then(Action::WaitFrames(1))
+        // Record yaw before the drag.
+        .then(Action::Custom(Box::new(|world| {
+            let orbit = camera_state(world);
+            world.insert_resource(InertiaCheckpoint { yaw_after_drag: orbit.target_yaw });
+        })))
+        // Apply a quick, decisive drag then immediately release.
+        .then(Action::PressMouseButton(MouseButton::Left))
+        .then(Action::MouseMotion {
+            delta: Vec2::new(150.0, 0.0),
+        })
+        .then(Action::WaitFrames(1))
+        .then(Action::ReleaseMouseButton(MouseButton::Left))
+        // Update the checkpoint to the yaw at the moment of release.
+        .then(Action::Custom(Box::new(|world| {
+            let orbit = camera_state(world);
+            world.insert_resource(InertiaCheckpoint { yaw_after_drag: orbit.target_yaw });
+        })))
+        // Wait a few frames — with inertia the yaw target should still be moving.
+        .then(Action::WaitFrames(10))
+        .then(assertions::custom(
+            "inertia carries yaw past the drag endpoint",
+            |world| {
+                let orbit = camera_state(world);
+                let checkpoint = world.resource::<InertiaCheckpoint>();
+                // The target_yaw should have advanced past what it was immediately at release.
+                (orbit.target_yaw - checkpoint.yaw_after_drag).abs() > 0.02
+            },
+        ))
+        .then(assertions::log_summary("orbit_camera_inertia summary"))
+        .then(inspect::dump_component_json::<OrbitCamera>("orbit_camera_inertia_state"))
+        .then(Action::Screenshot("orbit_camera_inertia_after".into()))
+        .then(Action::WaitFrames(1))
+        .build()
+}
+
+// ── checkpoint resources ──────────────────────────────────────────────────────
+
+#[derive(Resource, Clone, Copy)]
+struct InertiaCheckpoint {
+    yaw_after_drag: f32,
 }
 
 fn common_focus() -> Vec3 {

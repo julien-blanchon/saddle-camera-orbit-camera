@@ -100,12 +100,14 @@ fn focus_bounds_cuboid_clamps_all_axes() {
 
 #[test]
 fn snap_to_target_equalizes_current_and_target() {
-    let mut camera = OrbitCamera::default();
-    camera.target_yaw = 1.5;
-    camera.target_pitch = -0.3;
-    camera.target_distance = 20.0;
-    camera.target_focus = Vec3::new(5.0, 3.0, -2.0);
-    camera.target_orthographic_scale = 4.0;
+    let mut camera = OrbitCamera {
+        target_yaw: 1.5,
+        target_pitch: -0.3,
+        target_distance: 20.0,
+        target_focus: Vec3::new(5.0, 3.0, -2.0),
+        target_orthographic_scale: 4.0,
+        ..default()
+    };
 
     camera.snap_to_target();
 
