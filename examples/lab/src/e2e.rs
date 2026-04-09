@@ -116,6 +116,95 @@ fn set_cursor_position(world: &mut World, logical_position: Vec2) {
     window.set_cursor_position(Some(logical_position));
 }
 
+fn with_camera_settings(world: &mut World, update: impl FnOnce(&mut OrbitCameraSettings)) {
+    let entity = camera_entity(world);
+    if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
+        update(&mut settings);
+    }
+}
+
+fn with_camera(world: &mut World, update: impl FnOnce(&mut OrbitCamera)) {
+    let entity = camera_entity(world);
+    if let Some(mut camera) = world.get_mut::<OrbitCamera>(entity) {
+        update(&mut camera);
+    }
+}
+
+fn enable_zoom_to_cursor(world: &mut World) {
+    with_camera_settings(world, |settings| {
+        settings.mouse.zoom_to_cursor = true;
+    });
+}
+
+fn set_preset_view(world: &mut World, preset: OrbitCameraPresetView) {
+    with_camera(world, |camera| camera.set_preset_view(preset));
+}
+
+fn set_focus_bounds(world: &mut World, bounds: OrbitCameraFocusBounds) {
+    with_camera_settings(world, |settings| {
+        settings.focus_bounds = Some(bounds);
+    });
+}
+
+fn enable_force_update(world: &mut World) {
+    with_camera_settings(world, |settings| {
+        settings.enabled = false;
+        settings.force_update = true;
+    });
+}
+
+fn enable_auto_rotate(world: &mut World, wait_seconds: f32, speed: f32) {
+    with_camera_settings(world, |settings| {
+        settings.auto_rotate = saddle_camera_orbit_camera::OrbitCameraAutoRotate {
+            enabled: true,
+            wait_seconds,
+            speed,
+        };
+    });
+}
+
+fn disable_auto_rotate(world: &mut World) {
+    with_camera_settings(world, |settings| {
+        settings.auto_rotate.enabled = false;
+    });
+}
+
+fn enable_inertia(world: &mut World, orbit_friction: f32, pan_friction: f32, zoom_friction: f32) {
+    with_camera_settings(world, |settings| {
+        settings.inertia = saddle_camera_orbit_camera::OrbitCameraInertia {
+            enabled: true,
+            orbit_friction,
+            pan_friction,
+            zoom_friction,
+        };
+    });
+}
+
+fn configure_orthographic_snapshot(
+    world: &mut World,
+    scale: f32,
+    focus: Vec3,
+    yaw: f32,
+    pitch: f32,
+) {
+    let entity = camera_entity(world);
+    world.entity_mut(entity).insert(Projection::Orthographic(
+        OrthographicProjection {
+            scale,
+            scaling_mode: ScalingMode::FixedVertical {
+                viewport_height: 16.0,
+            },
+            ..OrthographicProjection::default_3d()
+        },
+    ));
+    with_camera(world, |camera| {
+        camera.target_focus = focus;
+        camera.target_yaw = yaw;
+        camera.target_pitch = pitch;
+        camera.target_orthographic_scale = 1.0;
+    });
+}
+
 fn build_smoke() -> Scenario {
     Scenario::builder("orbit_camera_smoke")
         .description(
@@ -221,11 +310,7 @@ fn build_preset_views() -> Scenario {
         .then(Action::WaitFrames(30))
         .then(Action::Screenshot("orbit_camera_preset_views_before".into()))
         .then(Action::Custom(Box::new(|world| {
-            let entity = camera_entity(world);
-            let mut camera = world
-                .get_mut::<OrbitCamera>(entity)
-                .expect("orbit camera should exist");
-            camera.set_preset_view(OrbitCameraPresetView::Top);
+            set_preset_view(world, OrbitCameraPresetView::Top);
         })))
         .then(Action::WaitFrames(10))
         .then(assertions::custom("top preset drives pitch toward overhead", |world| {
@@ -233,11 +318,7 @@ fn build_preset_views() -> Scenario {
             orbit.target_pitch > 1.4 && orbit.pitch > 0.8
         }))
         .then(Action::Custom(Box::new(|world| {
-            let entity = camera_entity(world);
-            let mut camera = world
-                .get_mut::<OrbitCamera>(entity)
-                .expect("orbit camera should exist");
-            camera.set_preset_view(OrbitCameraPresetView::Right);
+            set_preset_view(world, OrbitCameraPresetView::Right);
         })))
         .then(Action::WaitFrames(12))
         .then(assertions::custom("right preset drives yaw onto the side view", |world| {
@@ -258,10 +339,7 @@ fn build_zoom_to_cursor() -> Scenario {
         )
         .then(Action::WaitFrames(30))
         .then(Action::Custom(Box::new(|world| {
-            let entity = camera_entity(world);
-            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
-                settings.mouse.zoom_to_cursor = true;
-            }
+            enable_zoom_to_cursor(world);
             set_cursor_position(world, Vec2::new(1120.0, 260.0));
         })))
         .then(Action::Screenshot("orbit_camera_zoom_to_cursor_before".into()))
@@ -291,23 +369,7 @@ fn build_orthographic_snapshot() -> Scenario {
         )
         .then(Action::WaitFrames(30))
         .then(Action::Custom(Box::new(|world| {
-            let entity = camera_entity(world);
-            world.entity_mut(entity).insert(Projection::Orthographic(
-                OrthographicProjection {
-                    scale: 1.25,
-                    scaling_mode: ScalingMode::FixedVertical {
-                        viewport_height: 16.0,
-                    },
-                    ..OrthographicProjection::default_3d()
-                },
-            ));
-            let mut camera = world
-                .get_mut::<OrbitCamera>(entity)
-                .expect("orbit camera should exist");
-            camera.target_focus = Vec3::new(8.5, 0.8, -6.0);
-            camera.target_yaw = 0.75;
-            camera.target_pitch = -1.0;
-            camera.target_orthographic_scale = 1.0;
+            configure_orthographic_snapshot(world, 1.25, Vec3::new(8.5, 0.8, -6.0), 0.75, -1.0);
         })))
         .then(Action::WaitFrames(10))
         .then(assertions::custom("orthographic projection scale matches camera state", |world| {
@@ -336,17 +398,16 @@ fn build_focus_bounds() -> Scenario {
         )
         .then(Action::WaitFrames(30))
         .then(Action::Custom(Box::new(|world| {
-            let entity = camera_entity(world);
-            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
-                settings.focus_bounds = Some(OrbitCameraFocusBounds::Cuboid {
+            set_focus_bounds(
+                world,
+                OrbitCameraFocusBounds::Cuboid {
                     min: Vec3::new(-5.0, -5.0, -5.0),
                     max: Vec3::new(5.0, 5.0, 5.0),
-                });
-            }
-            let mut camera = world
-                .get_mut::<OrbitCamera>(entity)
-                .expect("orbit camera should exist");
-            camera.target_focus = Vec3::new(50.0, 50.0, 50.0);
+                },
+            );
+            with_camera(world, |camera| {
+                camera.target_focus = Vec3::new(50.0, 50.0, 50.0);
+            });
         })))
         .then(Action::WaitFrames(4))
         .then(assertions::custom("focus is clamped within cuboid bounds", |world| {
@@ -368,15 +429,10 @@ fn build_force_update() -> Scenario {
         )
         .then(Action::WaitFrames(30))
         .then(Action::Custom(Box::new(|world| {
-            let entity = camera_entity(world);
-            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
-                settings.enabled = false;
-                settings.force_update = true;
-            }
-            let mut camera = world
-                .get_mut::<OrbitCamera>(entity)
-                .expect("orbit camera should exist");
-            camera.target_yaw = 2.0;
+            enable_force_update(world);
+            with_camera(world, |camera| {
+                camera.target_yaw = 2.0;
+            });
         })))
         .then(Action::WaitFrames(2))
         .then(assertions::custom("force_update advances disabled camera", |world| {
@@ -405,14 +461,7 @@ fn build_auto_rotate() -> Scenario {
         .then(Action::WaitFrames(30))
         // Enable auto-rotate: 0.5 s idle wait, 1.2 rad/s speed.
         .then(Action::Custom(Box::new(|world| {
-            let entity = camera_entity(world);
-            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
-                settings.auto_rotate = saddle_camera_orbit_camera::OrbitCameraAutoRotate {
-                    enabled: true,
-                    wait_seconds: 0.5,
-                    speed: 1.2,
-                };
-            }
+            enable_auto_rotate(world, 0.5, 1.2);
         })))
         // Wait past the idle threshold (0.5 s = 30 frames) then an extra 60 frames for movement.
         .then(Action::WaitFrames(90))
@@ -425,10 +474,7 @@ fn build_auto_rotate() -> Scenario {
         .then(Action::WaitFrames(1))
         // Disable auto-rotate and capture a stable yaw.
         .then(Action::Custom(Box::new(|world| {
-            let entity = camera_entity(world);
-            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
-                settings.auto_rotate.enabled = false;
-            }
+            disable_auto_rotate(world);
         })))
         .then(Action::WaitFrames(30))
         .then(assertions::custom("yaw no longer advances after disable", |world| {
@@ -453,15 +499,7 @@ fn build_inertia() -> Scenario {
         .then(Action::WaitFrames(30))
         // Enable inertia with low friction so momentum is clearly visible.
         .then(Action::Custom(Box::new(|world| {
-            let entity = camera_entity(world);
-            if let Some(mut settings) = world.get_mut::<OrbitCameraSettings>(entity) {
-                settings.inertia = saddle_camera_orbit_camera::OrbitCameraInertia {
-                    enabled: true,
-                    orbit_friction: 2.0,
-                    pan_friction: 3.0,
-                    zoom_friction: 4.0,
-                };
-            }
+            enable_inertia(world, 2.0, 3.0, 4.0);
         })))
         .then(Action::Screenshot("orbit_camera_inertia_before".into()))
         .then(Action::WaitFrames(1))
